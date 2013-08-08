@@ -98,6 +98,21 @@ public abstract class AbstractModelloGeneratorMojo
     private List<String> packagedVersions = new ArrayList<String>();
 
     /**
+     * In contrast with {@link #packagedVersions}, this will generate one model for multiple versions.
+     * This way there are no converters required.
+     * Xpp3Writer can write to the proper version as long as you've defined the field containing the version:
+     * 
+     * <code>
+     *   <versionDefinition>
+     *     <type>field</type>
+     *     <value>modelVersion</value> <!-- the name of the field containing the version -->
+     *   </versionDefinition>
+     * </code>
+     */
+    @Parameter
+    private List<String> supportedVersions = new ArrayList<String>();
+    
+    /**
      * @since 1.0.1
      */
     @Component
@@ -175,7 +190,13 @@ public abstract class AbstractModelloGeneratorMojo
             parameters.setProperty( ModelloParameterConstants.ALL_VERSIONS,
                                     StringUtils.join( packagedVersions.iterator(), "," ) );
         }
-        
+
+        if ( supportedVersions.size() > 0 )
+        {
+            parameters.setProperty( ModelloParameterConstants.SUPPORTED_VERSIONS,
+                                    StringUtils.join( supportedVersions.iterator(), "," ) );
+        }
+
         customizeParameters( parameters );
 
         // ----------------------------------------------------------------------
@@ -356,6 +377,11 @@ public abstract class AbstractModelloGeneratorMojo
     public void setPackagedVersions( List<String> packagedVersions )
     {
         this.packagedVersions = Collections.unmodifiableList( packagedVersions );
+    }
+    
+    public void setSupportedVersions( List<String> supportedVersions )
+    {
+        this.supportedVersions = Collections.unmodifiableList( supportedVersions );
     }
 
     /**

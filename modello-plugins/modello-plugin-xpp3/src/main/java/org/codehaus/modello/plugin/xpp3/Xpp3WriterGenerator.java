@@ -22,12 +22,19 @@ package org.codehaus.modello.plugin.xpp3;
  * SOFTWARE.
  */
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
 import org.codehaus.modello.ModelloException;
+import org.codehaus.modello.ModelloParameterConstants;
 import org.codehaus.modello.model.Model;
 import org.codehaus.modello.model.ModelAssociation;
 import org.codehaus.modello.model.ModelClass;
 import org.codehaus.modello.model.ModelDefault;
 import org.codehaus.modello.model.ModelField;
+import org.codehaus.modello.model.Version;
 import org.codehaus.modello.plugin.java.javasource.JClass;
 import org.codehaus.modello.plugin.java.javasource.JField;
 import org.codehaus.modello.plugin.java.javasource.JMethod;
@@ -41,10 +48,6 @@ import org.codehaus.modello.plugins.xml.metadata.XmlAssociationMetadata;
 import org.codehaus.modello.plugins.xml.metadata.XmlFieldMetadata;
 import org.codehaus.modello.plugins.xml.metadata.XmlModelMetadata;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Properties;
-
 /**
  * @author <a href="mailto:jason@modello.org">Jason van Zyl </a>
  * @author <a href="mailto:evenisse@codehaus.org">Emmanuel Venisse </a>
@@ -53,13 +56,26 @@ public class Xpp3WriterGenerator
     extends AbstractXpp3Generator
 {
     private boolean requiresDomSupport;
-
+    
+    private List<Version> supportedVersions;
+    
     public void generate( Model model, Properties parameters )
         throws ModelloException
     {
         initialize( model, parameters );
 
         requiresDomSupport = false;
+        
+        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
+        
+        if ( versions != null )
+        {
+            supportedVersions = new ArrayList<Version>();
+            for( String version : versions.split( "," ) )
+            {
+                supportedVersions.add( new Version( version ) );
+            }
+        }
 
         try
         {
@@ -177,6 +193,37 @@ public class Xpp3WriterGenerator
             createWriteDomMethod( jClass );
         }
 
+        // @since 1.9
+        if ( objectModel.getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+        {
+            XmlModelMetadata xmlModelMetadata = (XmlModelMetadata) objectModel.getMetadata( XmlModelMetadata.ID );
+            
+            JType stringType = new JType( "java.lang.String" );
+            
+            JMethod utilityMethod =
+                new JMethod( "getNamespace", stringType, "the namespace of this model" );
+            utilityMethod.getModifiers().makePrivate();
+            
+            utilityMethod.addParameter( new JParameter( stringType, "version" ) );
+            
+            sc = utilityMethod.getSourceCode();
+            
+            sc.add( "return \"" + xmlModelMetadata.getNamespace() + "\".replace( \"${version}\", version );" );
+
+            jClass.addMethod( utilityMethod );
+
+            utilityMethod = new JMethod( "getSchemaLocation", stringType, "the schemaLocation of this model" );
+            utilityMethod.getModifiers().makePrivate();
+
+            utilityMethod.addParameter( new JParameter( stringType, "version" ) );
+
+            sc = utilityMethod.getSourceCode();
+
+            sc.add( "return \"" + xmlModelMetadata.getSchemaLocation() + "\".replace( \"${version}\", version );" );
+
+            jClass.addMethod( utilityMethod );
+        }
+        
         jClass.print( sourceWriter );
 
         sourceWriter.close();
@@ -212,25 +259,96 @@ public class Xpp3WriterGenerator
 
         ModelClassMetadata classMetadata = (ModelClassMetadata) modelClass.getMetadata( ModelClassMetadata.ID );
 
-        String namespace = null;
+        String namespaceValue = null;
+        String namespaceMethod = null;
+
         XmlModelMetadata xmlModelMetadata = (XmlModelMetadata) modelClass.getModel().getMetadata( XmlModelMetadata.ID );
 
         // add namespace information for root element only
         if ( classMetadata.isRootElement() && ( xmlModelMetadata.getNamespace() != null ) )
         {
-            namespace = xmlModelMetadata.getNamespace( getGeneratedVersion() );
-            sc.add( "serializer.setPrefix( \"\", \"" + namespace + "\" );" );
+            if ( getModel().getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+            {
+                if ( "field".equals( getModel().getVersionDefinition().getType() ) )
+                {
+                    String modelVersionGetter =
+                        uncapClassName + ".get" + capitalise( getModel().getVersionDefinition().getValue() ) + "()";
+
+                    namespaceMethod = "getNamespace( " + modelVersionGetter + " )";
+
+                    sc.add( "serializer.setPrefix( \"\", " + namespaceMethod + " );" );
+                }
+                else if ( "namespace".equals( getModel().getVersionDefinition().getType() ) )
+                {
+                    // we need to know the original namespace...
+                    getLogger().warn( "supportedVersions only works with versionDefinition of type field." );
+
+                    // default
+                    namespaceValue = xmlModelMetadata.getNamespace( getGeneratedVersion() );
+                    sc.add( "serializer.setPrefix( \"\", \"" + namespaceValue + "\" );" );
+                }
+                else
+                {
+                    // unknown type
+                    getLogger().warn( "unknown versionDefinition type: " + getModel().getVersionDefinition().getType() );
+
+                    // default
+                    namespaceValue = xmlModelMetadata.getNamespace( getGeneratedVersion() );
+                    sc.add( "serializer.setPrefix( \"\", \"" + namespaceValue + "\" );" );
+                }
+            }
+            else
+            {
+                namespaceValue = xmlModelMetadata.getNamespace( getGeneratedVersion() );
+                sc.add( "serializer.setPrefix( \"\", \"" + namespaceValue + "\" );" );
+            }
         }
 
-        if ( ( namespace != null ) && ( xmlModelMetadata.getSchemaLocation() != null ) )
+        if ( ( namespaceValue != null || namespaceMethod != null ) && ( xmlModelMetadata.getSchemaLocation() != null ) )
         {
-            String url = xmlModelMetadata.getSchemaLocation( getGeneratedVersion() );
-
             sc.add( "serializer.setPrefix( \"xsi\", \"http://www.w3.org/2001/XMLSchema-instance\" );" );
 
             sc.add( "serializer.startTag( NAMESPACE, tagName );" );
 
-            sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", \"" + namespace + " " + url + "\" );" );
+            String url = xmlModelMetadata.getSchemaLocation( getGeneratedVersion() );
+
+            if ( getModel().getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+            {
+                // developer expects to be able to
+
+                if ( "field".equals( getModel().getVersionDefinition().getType() ) )
+                {
+                    String modelVersionGetter =
+                        uncapClassName + ".get" + capitalise( getModel().getVersionDefinition().getValue() ) + "()";
+
+                    String urlMethod = "getSchemaLocation( " + modelVersionGetter + " )";
+
+                    sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", " + namespaceMethod + " + \" \" + "
+                        + urlMethod + " );" );
+                }
+                else if ( "namespace".equals( getModel().getVersionDefinition().getType() ) )
+                {
+                    // we need to know the original schemaLocation...
+                    getLogger().warn( "supportedVersions only works with versionDefinition of type field." );
+
+                    // default
+                    sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", \"" + namespaceValue + " " + url
+                        + "\" );" );
+                }
+                else
+                {
+                    // unknown type
+                    getLogger().warn( "unknown versionDefinition type: " + getModel().getVersionDefinition().getType() );
+
+                    // default
+                    sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", \"" + namespaceValue + " " + url
+                        + "\" );" );
+                }
+            }
+            else
+            {
+                sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", \"" + namespaceValue + " " + url + "\" );" );
+            }
         }
         else
         {
