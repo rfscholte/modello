@@ -24,6 +24,7 @@ package org.codehaus.modello.plugin.java;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
@@ -33,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.codehaus.modello.ModelloException;
+import org.codehaus.modello.ModelloParameterConstants;
 import org.codehaus.modello.ModelloRuntimeException;
 import org.codehaus.modello.model.CodeSegment;
 import org.codehaus.modello.model.Model;
@@ -41,6 +43,7 @@ import org.codehaus.modello.model.ModelClass;
 import org.codehaus.modello.model.ModelDefault;
 import org.codehaus.modello.model.ModelField;
 import org.codehaus.modello.model.ModelInterface;
+import org.codehaus.modello.model.Version;
 import org.codehaus.modello.plugin.java.javasource.JArrayType;
 import org.codehaus.modello.plugin.java.javasource.JClass;
 import org.codehaus.modello.plugin.java.javasource.JCollectionType;
@@ -72,10 +75,24 @@ public class JavaModelloGenerator
         new String[]{ "boolean", "Boolean", "byte", "Byte", "char", "Character", "short", "Short", "int", "Integer",
             "long", "Long", "float", "Float", "double", "Double", "String" } ) );
 
+    private List<Version> supportedVersions;
+    
+    
     public void generate( Model model, Properties parameters )
         throws ModelloException
     {
         initialize( model, parameters );
+        
+        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
+        
+        if ( versions != null )
+        {
+            supportedVersions = new ArrayList<Version>();
+            for( String version : versions.split( "," ) )
+            {
+                supportedVersions.add( new Version( version ) );
+            }
+        }
 
         try
         {
@@ -1171,7 +1188,7 @@ public class JavaModelloGenerator
 
         JField field = new JField( type, modelField.getName() );
 
-        if ( modelField.isModelVersionField() )
+        if ( modelField.isModelVersionField() && ( supportedVersions == null || supportedVersions.size() <= 1 ) )
         {
             field.setInitString( "\"" + getGeneratedVersion() + "\"" );
         }
