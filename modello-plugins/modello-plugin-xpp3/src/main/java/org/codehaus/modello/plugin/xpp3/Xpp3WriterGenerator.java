@@ -57,8 +57,6 @@ public class Xpp3WriterGenerator
 {
     private boolean requiresDomSupport;
     
-    private List<Version> supportedVersions;
-    
     public void generate( Model model, Properties parameters )
         throws ModelloException
     {
@@ -66,17 +64,6 @@ public class Xpp3WriterGenerator
 
         requiresDomSupport = false;
         
-        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
-        
-        if ( versions != null )
-        {
-            supportedVersions = new ArrayList<Version>();
-            for( String version : versions.split( "," ) )
-            {
-                supportedVersions.add( new Version( version ) );
-            }
-        }
-
         try
         {
             generateXpp3Writer();
@@ -194,7 +181,7 @@ public class Xpp3WriterGenerator
         }
 
         // @since 1.9
-        if ( objectModel.getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+        if ( objectModel.getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
         {
             XmlModelMetadata xmlModelMetadata = (XmlModelMetadata) objectModel.getMetadata( XmlModelMetadata.ID );
             
@@ -267,7 +254,7 @@ public class Xpp3WriterGenerator
         // add namespace information for root element only
         if ( classMetadata.isRootElement() && ( xmlModelMetadata.getNamespace() != null ) )
         {
-            if ( getModel().getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+            if ( getModel().getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
             {
                 if ( "field".equals( getModel().getVersionDefinition().getType() ) )
                 {
@@ -312,7 +299,7 @@ public class Xpp3WriterGenerator
 
             String url = xmlModelMetadata.getSchemaLocation( getGeneratedVersion() );
 
-            if ( getModel().getVersionDefinition() != null && supportedVersions != null && !supportedVersions.isEmpty() )
+            if ( getModel().getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
             {
                 // developer expects to be able to
 

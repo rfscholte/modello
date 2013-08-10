@@ -22,6 +22,14 @@ package org.codehaus.modello.plugin.xpp3;
  * SOFTWARE.
  */
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+import org.codehaus.modello.ModelloException;
+import org.codehaus.modello.ModelloParameterConstants;
+import org.codehaus.modello.model.Model;
+import org.codehaus.modello.model.Version;
 import org.codehaus.modello.plugins.xml.AbstractXmlJavaGenerator;
 
 /**
@@ -30,4 +38,29 @@ import org.codehaus.modello.plugins.xml.AbstractXmlJavaGenerator;
 public abstract class AbstractXpp3Generator
     extends AbstractXmlJavaGenerator
 {
+    private List<Version> supportedVersions;
+
+    @Override
+    protected void initialize( Model model, Properties parameters )
+        throws ModelloException
+    {
+        super.initialize( model, parameters );
+        
+        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
+        
+        if ( versions != null )
+        {
+            supportedVersions = new ArrayList<Version>();
+            for( String version : versions.split( "," ) )
+            {
+                supportedVersions.add( new Version( version ) );
+            }
+        }
+    }
+    
+    protected final List<Version> getSupportedVersions()
+    {
+        return supportedVersions;
+    }
+    
 }
