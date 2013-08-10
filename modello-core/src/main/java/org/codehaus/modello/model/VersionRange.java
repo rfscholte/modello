@@ -37,9 +37,14 @@ public class VersionRange
     private Version fromVersion;
 
     private Version toVersion;
+    
+    private String value;
 
     public VersionRange( String versionRange )
     {
+        
+        value = versionRange;
+        
         if ( versionRange.endsWith( "+" ) )
         {
             fromVersion = new Version( versionRange.substring( 0, versionRange.length() - 1 ) );
@@ -77,6 +82,11 @@ public class VersionRange
     public Version getToVersion()
     {
         return toVersion;
+    }
+    
+    public String getValue()
+    {
+        return value;
     }
 
     public boolean isToInfinite()
