@@ -403,6 +403,8 @@ public class Xpp3ReaderGenerator
         // ----------------------------------------------------------------------
 
         writeHelpers( jClass );
+        
+        writeInitializeVersionInsideVersionRange( jClass );
 
         if ( requiresDomSupport )
         {
