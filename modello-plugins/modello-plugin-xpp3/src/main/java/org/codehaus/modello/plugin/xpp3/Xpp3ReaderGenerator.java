@@ -57,6 +57,8 @@ public class Xpp3ReaderGenerator
 
     private static final String SOURCE_PARAM = "source";
 
+    private static final String VERSION_PARAM = "_version"; // prefix with _ to prevent name collision
+
     private static final String LOCATION_VAR = "_location";
 
     private ModelClass locationTracker;
@@ -65,7 +67,9 @@ public class Xpp3ReaderGenerator
 
     private ModelClass sourceTracker;
 
-    private String trackingArgs;
+    private String readArgs;
+
+    private String parseArgs;
 
     private boolean requiresDomSupport;
 
@@ -80,7 +84,7 @@ public class Xpp3ReaderGenerator
         initialize( model, parameters );
 
         locationTracker = sourceTracker = null;
-        trackingArgs = locationField = "";
+        readArgs = parseArgs = locationField = "";
         requiresDomSupport = false;
 
         if ( isLocationTracking() )
@@ -100,8 +104,14 @@ public class Xpp3ReaderGenerator
 
             if ( sourceTracker != null )
             {
-                trackingArgs += ", " + SOURCE_PARAM;
+                readArgs += ", " + SOURCE_PARAM;
+                parseArgs += ", " + SOURCE_PARAM;
             }
+        }
+        
+        if ( verifySupportedVersions() )
+        {
+            parseArgs += ", " + VERSION_PARAM;
         }
 
         try
@@ -165,7 +175,7 @@ public class Xpp3ReaderGenerator
 
         unmarshall.addParameter( new JParameter( new JClass( "XmlPullParser" ), "parser" ) );
         unmarshall.addParameter( new JParameter( JClass.BOOLEAN, "strict" ) );
-        addTrackingParameters( unmarshall );
+        addAdditionalReadParameters( unmarshall );
 
         unmarshall.addException( new JClass( "IOException" ) );
         unmarshall.addException( new JClass( "XmlPullParserException" ) );
@@ -212,8 +222,9 @@ public class Xpp3ReaderGenerator
                             + "found '\" + parser.getName() + \"'\", parser, null );" );
         sc.add( "}" );
 
+        // use readArg as long as only version is used here. We don't know its value yet.
         sc.add(
-            className + ' ' + variableName + " = parse" + capClassName + "( parser, strict" + trackingArgs + " );" );
+            className + ' ' + variableName + " = parse" + capClassName + "( parser, strict" + readArgs + " );" );
 
         if ( rootElement )
         {
@@ -244,7 +255,7 @@ public class Xpp3ReaderGenerator
 
         unmarshall.addParameter( new JParameter( new JClass( "Reader" ), "reader" ) );
         unmarshall.addParameter( new JParameter( JClass.BOOLEAN, "strict" ) );
-        addTrackingParameters( unmarshall );
+        addAdditionalReadParameters( unmarshall );
 
         unmarshall.addException( new JClass( "IOException" ) );
         unmarshall.addException( new JClass( "XmlPullParserException" ) );
@@ -261,7 +272,7 @@ public class Xpp3ReaderGenerator
 
         sc.add( "" );
 
-        sc.add( "return " + readerMethodName + "( parser, strict" + trackingArgs + " );" );
+        sc.add( "return " + readerMethodName + "( parser, strict" + readArgs + " );" );
 
         jClass.addMethod( unmarshall );
 
@@ -291,14 +302,14 @@ public class Xpp3ReaderGenerator
 
         unmarshall.addParameter( new JParameter( new JClass( "InputStream" ), "in" ) );
         unmarshall.addParameter( new JParameter( JClass.BOOLEAN, "strict" ) );
-        addTrackingParameters( unmarshall );
+        addAdditionalReadParameters( unmarshall );
 
         unmarshall.addException( new JClass( "IOException" ) );
         unmarshall.addException( new JClass( "XmlPullParserException" ) );
 
         sc = unmarshall.getSourceCode();
 
-        sc.add( "return " + readerMethodName + "( ReaderFactory.newXmlReader( in ), strict" + trackingArgs + " );" );
+        sc.add( "return " + readerMethodName + "( ReaderFactory.newXmlReader( in ), strict" + readArgs + " );" );
 
         jClass.addMethod( unmarshall );
 
@@ -404,7 +415,7 @@ public class Xpp3ReaderGenerator
 
         writeHelpers( jClass );
         
-        writeInitializeVersionInsideVersionRange( jClass );
+        writeInitializeVersionInsideVersionRange( jClass, objectModel.getVersionDefinition() );
 
         if ( requiresDomSupport )
         {
@@ -457,7 +468,15 @@ public class Xpp3ReaderGenerator
 
         unmarshall.addParameter( new JParameter( new JClass( "XmlPullParser" ), "parser" ) );
         unmarshall.addParameter( new JParameter( JClass.BOOLEAN, "strict" ) );
-        addTrackingParameters( unmarshall );
+        
+        if( rootElement )
+        {
+            addAdditionalReadParameters( unmarshall );
+        }
+        else
+        {
+            addAdditionalParseParameters( unmarshall );
+        }
 
         unmarshall.addException( new JClass( "IOException" ) );
         unmarshall.addException( new JClass( "XmlPullParserException" ) );
@@ -540,6 +559,12 @@ public class Xpp3ReaderGenerator
                                                    JSourceCode sc, JClass jClass )
     {
         ModelField contentField = null;
+        
+        if( rootElement )
+        {
+            sc.add( "String " + VERSION_PARAM + " = null;" );
+            sc.add(  "" );
+        }
 
         sc.add( "for ( int i = parser.getAttributeCount() - 1; i >= 0; i-- )" );
         sc.add( "{" );
@@ -558,6 +583,7 @@ public class Xpp3ReaderGenerator
             sc.add( "{" );
             sc.addIndented( "// ignore xmlns attribute in root class, which is a reserved attribute name" );
             sc.add( "}" );
+            
         }
 
         for ( ModelField field : modelFields )
@@ -625,8 +651,18 @@ public class Xpp3ReaderGenerator
             alias = "\"" + field.getAlias() + "\"";
         }
 
+        String versionCheck; 
+        if ( verifySupportedVersions() && !field.isModelVersionField() )
+        {
+            versionCheck = "versionInsideVersionRange(  " + VERSION_PARAM + ", \"" + field.getVersionRange() + "\" ) && ";
+        }
+        else
+        {
+            versionCheck = "";
+        }
+
         String tagComparison =
-            ( addElse ? "else " : "" ) + "if ( checkFieldWithDuplicate( parser, \"" + fieldTagName + "\", " + alias
+            ( addElse ? "else " : "" ) + "if ( " + versionCheck + "checkFieldWithDuplicate( parser, \"" + fieldTagName + "\", " + alias
                 + ", parsed ) )";
 
         if ( !( field instanceof ModelAssociation ) )
@@ -639,6 +675,11 @@ public class Xpp3ReaderGenerator
 
             writePrimitiveField( field, field.getType(), objectName, objectName, "\"" + field.getName() + "\"",
                                  "set" + capFieldName, sc );
+            
+            if ( field.isModelVersionField() && verifySupportedVersions() )
+            {
+                sc.add( "_version = " + objectName + ".get" + capFieldName + "();" );
+            }
 
             sc.unindent();
             sc.add( "}" );
@@ -656,7 +697,7 @@ public class Xpp3ReaderGenerator
                 sc.add( "{" );
                 sc.addIndented(
                     objectName + ".set" + capFieldName + "( parse" + association.getTo() + "( parser, strict"
-                        + trackingArgs + " ) );" );
+                        + parseArgs + " ) );" );
                 sc.add( "}" );
             }
             else
@@ -763,7 +804,7 @@ public class Xpp3ReaderGenerator
 
                     if ( inModel )
                     {
-                        sc.add( adder + "( parse" + association.getTo() + "( parser, strict" + trackingArgs + " ) );" );
+                        sc.add( adder + "( parse" + association.getTo() + "( parser, strict" + parseArgs + " ) );" );
                     }
                     else
                     {
@@ -1524,11 +1565,23 @@ public class Xpp3ReaderGenerator
         return method;
     }
 
-    private void addTrackingParameters( JMethod method )
+    private void addAdditionalReadParameters( JMethod method )
     {
         if ( sourceTracker != null )
         {
             method.addParameter( new JParameter( new JClass( sourceTracker.getName() ), SOURCE_PARAM ) );
+        }
+    }
+
+    private void addAdditionalParseParameters( JMethod method )
+    {
+        if ( sourceTracker != null )
+        {
+            method.addParameter( new JParameter( new JClass( sourceTracker.getName() ), SOURCE_PARAM ) );
+        }
+        if ( verifySupportedVersions() )
+        {
+            method.addParameter( new JParameter( new JType( "java.lang.String" ), VERSION_PARAM ) );
         }
     }
 

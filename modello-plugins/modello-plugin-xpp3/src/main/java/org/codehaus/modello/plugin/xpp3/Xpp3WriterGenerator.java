@@ -181,7 +181,7 @@ public class Xpp3WriterGenerator
         }
 
         // @since 1.9
-        if ( objectModel.getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
+        if ( objectModel.getVersionDefinition() != null && verifySupportedVersions() )
         {
             XmlModelMetadata xmlModelMetadata = (XmlModelMetadata) objectModel.getMetadata( XmlModelMetadata.ID );
             
@@ -254,7 +254,7 @@ public class Xpp3WriterGenerator
         // add namespace information for root element only
         if ( classMetadata.isRootElement() && ( xmlModelMetadata.getNamespace() != null ) )
         {
-            if ( getModel().getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
+            if ( getModel().getVersionDefinition() != null && verifySupportedVersions() )
             {
                 if ( "field".equals( getModel().getVersionDefinition().getType() ) )
                 {
@@ -299,7 +299,7 @@ public class Xpp3WriterGenerator
 
             String url = xmlModelMetadata.getSchemaLocation( getGeneratedVersion() );
 
-            if ( getModel().getVersionDefinition() != null && getSupportedVersions() != null && !getSupportedVersions().isEmpty() )
+            if ( getModel().getVersionDefinition() != null && verifySupportedVersions() )
             {
                 // developer expects to be able to
 
