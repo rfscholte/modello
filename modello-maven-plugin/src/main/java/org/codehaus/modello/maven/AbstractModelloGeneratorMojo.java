@@ -103,10 +103,10 @@ public abstract class AbstractModelloGeneratorMojo
      * Xpp3Writer can write to the proper version as long as you've defined the field containing the version:
      * 
      * <code>
-     *   <versionDefinition>
-     *     <type>field</type>
-     *     <value>modelVersion</value> <!-- the name of the field containing the version -->
-     *   </versionDefinition>
+     *   &lt;versionDefinition&gt;
+     *     &lt;type&gt;field&lt;/type&gt;
+     *     &lt;value&gt;modelVersion&lt;/value&gt; &lt;!-- the name of the field containing the version --&gt;
+     *   &lt;/versionDefinition&gt;
      * </code>
      */
     @Parameter
