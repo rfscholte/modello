@@ -60,7 +60,7 @@
     ]]>
   </description>
   <versionDefinition>
-    <type>field</type>
+    <type>field+namespace</type>
     <value>modelVersion</value>
   </versionDefinition>
   <defaults>

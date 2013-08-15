@@ -23,18 +23,15 @@ package org.codehaus.modello.plugin.xpp3;
  */
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 import org.codehaus.modello.ModelloException;
-import org.codehaus.modello.ModelloParameterConstants;
 import org.codehaus.modello.model.Model;
 import org.codehaus.modello.model.ModelAssociation;
 import org.codehaus.modello.model.ModelClass;
 import org.codehaus.modello.model.ModelDefault;
 import org.codehaus.modello.model.ModelField;
-import org.codehaus.modello.model.Version;
 import org.codehaus.modello.plugin.java.javasource.JClass;
 import org.codehaus.modello.plugin.java.javasource.JField;
 import org.codehaus.modello.plugin.java.javasource.JMethod;
@@ -256,7 +253,7 @@ public class Xpp3WriterGenerator
         {
             if ( getModel().getVersionDefinition() != null && verifySupportedVersions() )
             {
-                if ( "field".equals( getModel().getVersionDefinition().getType() ) )
+                if ( getModel().getVersionDefinition().isFieldType() )
                 {
                     String modelVersionGetter =
                         uncapClassName + ".get" + capitalise( getModel().getVersionDefinition().getValue() ) + "()";
@@ -265,7 +262,7 @@ public class Xpp3WriterGenerator
 
                     sc.add( "serializer.setPrefix( \"\", " + namespaceMethod + " );" );
                 }
-                else if ( "namespace".equals( getModel().getVersionDefinition().getType() ) )
+                else if ( getModel().getVersionDefinition().isNamespaceType() )
                 {
                     // we need to know the original namespace...
                     getLogger().warn( "supportedVersions only works with versionDefinition of type field." );
@@ -303,7 +300,7 @@ public class Xpp3WriterGenerator
             {
                 // developer expects to be able to
 
-                if ( "field".equals( getModel().getVersionDefinition().getType() ) )
+                if ( getModel().getVersionDefinition().isFieldType() )
                 {
                     String modelVersionGetter =
                         uncapClassName + ".get" + capitalise( getModel().getVersionDefinition().getValue() ) + "()";
@@ -313,7 +310,7 @@ public class Xpp3WriterGenerator
                     sc.add( "serializer.attribute( \"\", \"xsi:schemaLocation\", " + namespaceMethod + " + \" \" + "
                         + urlMethod + " );" );
                 }
-                else if ( "namespace".equals( getModel().getVersionDefinition().getType() ) )
+                else if ( getModel().getVersionDefinition().isNamespaceType() )
                 {
                     // we need to know the original schemaLocation...
                     getLogger().warn( "supportedVersions only works with versionDefinition of type field." );
