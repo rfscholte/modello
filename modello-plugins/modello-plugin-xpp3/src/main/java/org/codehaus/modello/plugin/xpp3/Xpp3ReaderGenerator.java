@@ -581,6 +581,11 @@ public class Xpp3ReaderGenerator
         sc.add( "String value = parser.getAttributeValue( i );" );
         sc.add( "" );
 
+        /* @todo  - Discover prefix for 'http://www.w3.org/2001/XMLSchema-instance'
+         *        - Discover value of default namespace (i.e. xmlns) 
+         *        - Read 'prefix':schemaLocation and search for the value of default namespace
+         *        - extract version of its xsd location, which is preferred above default namespace value 
+         */
         sc.add( "if ( name.indexOf( ':' ) >= 0 )" );
         sc.add( "{" );
         sc.addIndented( "// just ignore attributes with non-default namespace (for example: xmlns:xsi)" );
@@ -1686,13 +1691,20 @@ public class Xpp3ReaderGenerator
             JMethod extractVersionFromSchemaLocation = new JMethod( "extractVersionFromSchemaLocation", new JType( "String" ), "the version extracted from the schema location" );
 
             extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "schemaLocation" ) );
+//            extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "namespace" ) );
+            
+            /* @todo Improve:
+             *       - Separate 'schemaLocation' in key/value pairs
+             *       - Get the value by the 'namespace' parameter
+             *       - extract its version 
+             */
 
             JSourceCode sc = extractVersionFromSchemaLocation.getSourceCode();
             
             String regex = toVersionGroupedRegexp( xmlModelMetadata.getSchemaLocation() );
             
             sc.add( "java.util.regex.Matcher matcher = java.util.regex.Pattern.compile( \"" + regex.replace( "\\", "\\\\" ) + "\" ).matcher( schemaLocation );" );
-            sc.add( "if( matcher.matches() )" );
+            sc.add( "if( matcher.find() )" );
             sc.add( "{" );
             sc.addIndented( "return matcher.group( 1 );" );
             sc.add( "}" );
