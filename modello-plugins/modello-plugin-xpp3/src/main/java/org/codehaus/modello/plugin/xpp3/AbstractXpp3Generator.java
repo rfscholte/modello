@@ -25,6 +25,7 @@ package org.codehaus.modello.plugin.xpp3;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -170,8 +171,10 @@ public abstract class AbstractXpp3Generator
         JSourceCode sc = clazz.getStaticInitializationCode();
         sc.add( "supportedVersionRanges = new java.util.HashMap<String, java.util.Set<String>>();" );
 
-        for( Map.Entry<Version, Set<String>> entry : versionMap.entrySet() )
+        Iterator<Map.Entry<Version, Set<String>>> iter = versionMap.entrySet().iterator();
+        while( iter.hasNext() )
         {
+            Map.Entry<Version, Set<String>> entry = iter.next();
             String field = entry.getKey().toString( "v", "_" );
             sc.add( "java.util.Set<String> " + field + " = new java.util.HashSet<String>();" );
             if ( !entry.getValue().isEmpty() )
@@ -179,12 +182,16 @@ public abstract class AbstractXpp3Generator
                 sc.add( "java.util.Collections.addAll( " + field + ", \"" + StringUtils.join( entry.getValue().iterator(), "\", \"" ) + "\" );" );
             }
             sc.add( "supportedVersionRanges.put( \"" + entry.getKey().toString() + "\", " + field + " );" );
-            sc.add( "" );
+            
+            if( iter.hasNext() )
+            {
+                sc.add( "" );
+            }
         }
         
         JMethod versionInsideVersionRange = new JMethod( "versionInsideVersionRange", JType.BOOLEAN, "Check if version is inside versionRange" );
-        versionInsideVersionRange.addParameter( new JParameter( new JType( "java.lang.String" ), "version" ) );
-        versionInsideVersionRange.addParameter( new JParameter( new JType( "java.lang.String" ), "versionRange" ) );
+        versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "version" ) );
+        versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "versionRange" ) );
         sc = versionInsideVersionRange.getSourceCode();
         sc.add( "if ( version == null || !supportedVersionRanges.containsKey( version ) )" );
         sc.add( "{" );
