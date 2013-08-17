@@ -361,6 +361,11 @@ public class Xpp3ReaderGenerator
         jClass.addImport( "java.io.IOException" );
         jClass.addImport( "java.io.Reader" );
         jClass.addImport( "java.text.DateFormat" );
+        if ( verifySupportedVersions() )
+        {
+            jClass.addImport( "java.util.regex.Matcher" );
+            jClass.addImport( "java.util.regex.Pattern" );
+        }
 
         addModelImports( jClass, null );
 
@@ -1674,7 +1679,7 @@ public class Xpp3ReaderGenerator
             
             String regex = toVersionGroupedRegexp( xmlModelMetadata.getNamespace() );
             
-            sc.add( "java.util.regex.Matcher matcher = java.util.regex.Pattern.compile( \"" + regex.replace( "\\", "\\\\" ) + "\" ).matcher( namespace );" );
+            sc.add( "Matcher matcher = Pattern.compile( \"" + StringUtils.escape( regex ) + "\" ).matcher( namespace );" );
             sc.add( "if( matcher.matches() )" );
             sc.add( "{" );
             sc.addIndented( "return matcher.group( 1 );" );
@@ -1705,7 +1710,7 @@ public class Xpp3ReaderGenerator
             
             String regex = toVersionGroupedRegexp( xmlModelMetadata.getSchemaLocation() );
             
-            sc.add( "java.util.regex.Matcher matcher = java.util.regex.Pattern.compile( \"" + regex.replace( "\\", "\\\\" ) + "\" ).matcher( schemaLocation );" );
+            sc.add( "Matcher matcher = Pattern.compile( \"" + StringUtils.escape( regex ) + "\" ).matcher( schemaLocation );" );
             sc.add( "if( matcher.find() )" );
             sc.add( "{" );
             sc.addIndented( "return matcher.group( 1 );" );
