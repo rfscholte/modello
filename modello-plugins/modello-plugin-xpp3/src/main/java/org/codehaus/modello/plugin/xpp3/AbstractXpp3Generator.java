@@ -154,13 +154,13 @@ public abstract class AbstractXpp3Generator
         sc.add( "if ( version == null || !supportedVersionRanges.containsKey( version ) )" );
         sc.add( "{" );
         String hint;
-        if ( "field".equals( versionDefinition.getType() ) )
-        {
-            hint = "Please start the xml by specifying '" + versionDefinition+  "'.";
-        }
-        else if ( "namespace".equals( versionDefinition.getType() ) )
+        if ( versionDefinition.isNamespaceType() )
         {
             hint = "Please specify the namespace in the rootelement of the xml.";
+        }
+        else if ( versionDefinition.isFieldType() )
+        {
+            hint = "Please start the xml by specifying '" + versionDefinition+  "'.";
         }
         else
         {
