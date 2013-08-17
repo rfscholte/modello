@@ -1666,6 +1666,7 @@ public class Xpp3ReaderGenerator
         if( xmlModelMetadata.getNamespace() != null )
         {
             JMethod extractVersionFromNamespace = new JMethod( "extractVersionFromNamespace", new JType( "String" ), "the version extracted from the namespace" );
+            extractVersionFromNamespace.getModifiers().makePrivate();
             
             extractVersionFromNamespace.addParameter( new JParameter( new JType( "String" ), "namespace" ) );
             
@@ -1689,6 +1690,7 @@ public class Xpp3ReaderGenerator
         if( xmlModelMetadata.getSchemaLocation() != null )
         {
             JMethod extractVersionFromSchemaLocation = new JMethod( "extractVersionFromSchemaLocation", new JType( "String" ), "the version extracted from the schema location" );
+            extractVersionFromSchemaLocation.getModifiers().makePrivate();
 
             extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "schemaLocation" ) );
 //            extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "namespace" ) );
