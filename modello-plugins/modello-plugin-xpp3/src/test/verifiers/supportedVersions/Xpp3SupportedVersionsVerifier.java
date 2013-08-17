@@ -34,6 +34,7 @@ import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.codehaus.modello.verifier.Verifier;
 import org.codehaus.modello.verifier.VerifierException;
 import org.codehaus.plexus.util.ReaderFactory;
+import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.custommonkey.xmlunit.Diff;
 import org.custommonkey.xmlunit.XMLUnit;
 
@@ -50,6 +51,10 @@ public class Xpp3SupportedVersionsVerifier
         verifyPom400();
 
         verifyPom500();
+        
+        verifyPom500ModelVersionWithPom400Namespace();
+        
+        verifyPom400ModelVersionWithPom500Namespace();
     }
 
     public void verifyPom400()
@@ -112,4 +117,41 @@ public class Xpp3SupportedVersionsVerifier
 
     }
 
+    public void verifyPom500ModelVersionWithPom400Namespace()
+                    throws Exception
+    {
+        File file = new File( "src/test/verifiers/supportedVersions/pom500+400.xml" );
+
+        Reader reader = ReaderFactory.newXmlReader( file );
+
+        MavenXpp3Reader modelReader = new MavenXpp3Reader();
+
+        try
+        {
+            Model model = modelReader.read( reader );
+            fail( "Should fail since namespace and modelVersion are not in sync." );
+        }
+        catch ( XmlPullParserException e )
+        {
+        }
+    }
+
+    public void verifyPom400ModelVersionWithPom500Namespace()
+                    throws Exception
+    {
+        File file = new File( "src/test/verifiers/supportedVersions/pom400+500.xml" );
+
+        Reader reader = ReaderFactory.newXmlReader( file );
+
+        MavenXpp3Reader modelReader = new MavenXpp3Reader();
+
+        try
+        {
+            Model model = modelReader.read( reader );
+            fail( "Should fail since namespace and modelVersion are not in sync." );
+        }
+        catch ( XmlPullParserException e )
+        {
+        }
+    }
 }

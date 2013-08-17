@@ -25,6 +25,8 @@ package org.codehaus.modello.plugin.xpp3;
 import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.codehaus.modello.ModelloException;
 import org.codehaus.modello.model.Model;
@@ -32,6 +34,7 @@ import org.codehaus.modello.model.ModelAssociation;
 import org.codehaus.modello.model.ModelClass;
 import org.codehaus.modello.model.ModelDefault;
 import org.codehaus.modello.model.ModelField;
+import org.codehaus.modello.model.VersionDefinition;
 import org.codehaus.modello.plugin.java.javasource.JClass;
 import org.codehaus.modello.plugin.java.javasource.JField;
 import org.codehaus.modello.plugin.java.javasource.JMethod;
@@ -45,6 +48,7 @@ import org.codehaus.modello.plugin.model.ModelClassMetadata;
 import org.codehaus.modello.plugins.xml.metadata.XmlAssociationMetadata;
 import org.codehaus.modello.plugins.xml.metadata.XmlClassMetadata;
 import org.codehaus.modello.plugins.xml.metadata.XmlFieldMetadata;
+import org.codehaus.modello.plugins.xml.metadata.XmlModelMetadata;
 import org.codehaus.plexus.util.StringUtils;
 
 /**
@@ -415,7 +419,11 @@ public class Xpp3ReaderGenerator
 
         writeHelpers( jClass );
         
-        writeInitializeVersionInsideVersionRange( jClass, objectModel.getVersionDefinition() );
+        if( verifySupportedVersions() )
+        {
+            writeInitializeVersionInsideVersionRange( jClass, objectModel.getVersionDefinition() );
+            writeVersionExtractors( jClass, objectModel.getVersionDefinition() );
+        }
 
         if ( requiresDomSupport )
         {
@@ -503,7 +511,7 @@ public class Xpp3ReaderGenerator
         if ( contentField != null )
         {
             writePrimitiveField( contentField, contentField.getType(), uncapClassName, uncapClassName, "\"\"",
-                                 "set" + capitalise( contentField.getName() ), sc );
+                                 "set" + capitalise( contentField.getName() ), sc, null );
         }
         else
         {
@@ -560,7 +568,7 @@ public class Xpp3ReaderGenerator
     {
         ModelField contentField = null;
         
-        if( rootElement )
+        if( rootElement && verifySupportedVersions() )
         {
             sc.add( "String " + VERSION_PARAM + " = null;" );
             sc.add(  "" );
@@ -581,7 +589,14 @@ public class Xpp3ReaderGenerator
         {
             sc.add( "else if ( \"xmlns\".equals( name ) )" );
             sc.add( "{" );
-            sc.addIndented( "// ignore xmlns attribute in root class, which is a reserved attribute name" );
+            if( verifySupportedVersions() && getModel().getVersionDefinition().isNamespaceType() )
+            {
+                sc.addIndented( VERSION_PARAM + " = extractVersionFromNamespace( value );" );
+            }
+            else
+            {
+                sc.addIndented( "// ignore xmlns attribute in root class, which is a reserved attribute name" );
+            }
             sc.add( "}" );
             
         }
@@ -599,7 +614,7 @@ public class Xpp3ReaderGenerator
                 sc.indent();
 
                 writePrimitiveField( field, field.getType(), objectName, objectName, "\"" + field.getName() + "\"",
-                                     "set" + capitalise( field.getName() ), sc );
+                                     "set" + capitalise( field.getName() ), sc, null );
 
                 sc.unindent();
                 sc.add( "}" );
@@ -673,12 +688,29 @@ public class Xpp3ReaderGenerator
 
             sc.indent();
 
-            writePrimitiveField( field, field.getType(), objectName, objectName, "\"" + field.getName() + "\"",
-                                 "set" + capFieldName, sc );
-            
-            if ( field.isModelVersionField() && verifySupportedVersions() )
+            final String MODELVERSION_PARAM = "_modelVersion";
+
+            boolean useVersionParam = field.isModelVersionField() && verifySupportedVersions() && getModel().getVersionDefinition().isNamespaceType(); 
+
+            String setterVariable = null;
+            if ( useVersionParam )
             {
-                sc.add( "_version = " + objectName + ".get" + capFieldName + "();" );
+                sc.add( "String " + ( setterVariable =  MODELVERSION_PARAM ) + ";" );
+            }
+
+            writePrimitiveField( field, field.getType(), objectName, objectName, "\"" + field.getName() + "\"",
+                                 "set" + capFieldName, sc, setterVariable );
+            
+            if ( useVersionParam )
+            {
+                sc.add( "if( " + VERSION_PARAM +" == null  ) " );
+                sc.add( "{" );
+                sc.addIndented( VERSION_PARAM + " = " + MODELVERSION_PARAM + ";"  );
+                sc.add( "}" );
+                sc.add( "else if ( !" +  VERSION_PARAM + ".equals( " + MODELVERSION_PARAM + " ) )" );
+                sc.add( "{" );
+                sc.addIndented( "throw new XmlPullParserException( \"Versions of namespace and " + field.getName() + " must match.\");" );
+                sc.add( "}" );
             }
 
             sc.unindent();
@@ -819,7 +851,7 @@ public class Xpp3ReaderGenerator
                                 + ".size() )";
                         }
                         writePrimitiveField( association, association.getTo(), associationName, LOCATION_VAR + "s", key,
-                                             "add", sc );
+                                             "add", sc, null );
                     }
 
                     if ( wrappedItems )
@@ -950,7 +982,7 @@ public class Xpp3ReaderGenerator
     }
 
     private void writePrimitiveField( ModelField field, String type, String objectName, String locatorName,
-                                      String locationKey, String setterName, JSourceCode sc )
+                                      String locationKey, String setterName, JSourceCode sc, String setterVariable )
     {
         XmlFieldMetadata xmlFieldMetadata = (XmlFieldMetadata) field.getMetadata( XmlFieldMetadata.ID );
 
@@ -978,13 +1010,13 @@ public class Xpp3ReaderGenerator
             parserGetter = "getTrimmedValue( " + parserGetter + " )";
         }
 
-        String keyCapture = "";
+        String setterVariables = ( setterVariable == null ? "" : setterVariable + " = " );
         writeNewLocation( null, sc );
         if ( locationTracker != null && "?".equals( locationKey ) )
         {
             sc.add( "Object _key;" );
             locationKey = "_key";
-            keyCapture = "_key = ";
+            setterVariables += "_key = ";
         }
         else
         {
@@ -993,65 +1025,65 @@ public class Xpp3ReaderGenerator
 
         if ( "boolean".equals( type ) || "Boolean".equals( type ) )
         {
-            sc.add( objectName + "." + setterName + "( " + keyCapture + "getBooleanValue( " + parserGetter + ", \""
+            sc.add( objectName + "." + setterName + "( " + setterVariables + "getBooleanValue( " + parserGetter + ", \""
                         + tagName + "\", parser, \"" + field.getDefaultValue() + "\" ) );" );
         }
         else if ( "char".equals( type ) )
         {
-            sc.add( objectName + "." + setterName + "( " + keyCapture + "getCharacterValue( " + parserGetter + ", \""
+            sc.add( objectName + "." + setterName + "( " + setterVariables + "getCharacterValue( " + parserGetter + ", \""
                         + tagName + "\", parser ) );" );
         }
         else if ( "double".equals( type ) )
         {
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getDoubleValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getDoubleValue( " + parserGetter + ", \"" + tagName
                     + "\", parser, strict ) );" );
         }
         else if ( "float".equals( type ) )
         {
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getFloatValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getFloatValue( " + parserGetter + ", \"" + tagName
                     + "\", parser, strict ) );" );
         }
         else if ( "int".equals( type ) )
         {
-            sc.add( objectName + "." + setterName + "( " + keyCapture + "getIntegerValue( " + parserGetter + ", \""
+            sc.add( objectName + "." + setterName + "( " + setterVariables + "getIntegerValue( " + parserGetter + ", \""
                         + tagName + "\", parser, strict ) );" );
         }
         else if ( "long".equals( type ) )
         {
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getLongValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getLongValue( " + parserGetter + ", \"" + tagName
                     + "\", parser, strict ) );" );
         }
         else if ( "short".equals( type ) )
         {
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getShortValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getShortValue( " + parserGetter + ", \"" + tagName
                     + "\", parser, strict ) );" );
         }
         else if ( "byte".equals( type ) )
         {
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getByteValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getByteValue( " + parserGetter + ", \"" + tagName
                     + "\", parser, strict ) );" );
         }
         else if ( "String".equals( type ) )
         {
             // TODO: other Primitive types
-            sc.add( objectName + "." + setterName + "( " + keyCapture + parserGetter + " );" );
+            sc.add( objectName + "." + setterName + "( " + setterVariables + parserGetter + " );" );
         }
         else if ( "Date".equals( type ) )
         {
             String format = xmlFieldMetadata.getFormat();
             sc.add( "String dateFormat = " + ( format != null ? "\"" + format + "\"" : "null" ) + ";" );
             sc.add(
-                objectName + "." + setterName + "( " + keyCapture + "getDateValue( " + parserGetter + ", \"" + tagName
+                objectName + "." + setterName + "( " + setterVariables + "getDateValue( " + parserGetter + ", \"" + tagName
                     + "\", dateFormat, parser ) );" );
         }
         else if ( "DOM".equals( type ) )
         {
-            sc.add( objectName + "." + setterName + "( " + keyCapture + ( domAsXpp3
+            sc.add( objectName + "." + setterName + "( " + setterVariables + ( domAsXpp3
                 ? "org.codehaus.plexus.util.xml.Xpp3DomBuilder.build"
                 : "buildDom" ) + "( parser, " + xmlFieldMetadata.isTrim() + " ) );" );
 
@@ -1062,7 +1094,7 @@ public class Xpp3ReaderGenerator
             throw new IllegalArgumentException( "Unknown type: " + type );
         }
 
-        if ( keyCapture.length() > 0 )
+        if ( locationKey.length() > 0 )
         {
             writeSetLocation( locationKey, locatorName, null, sc );
         }
@@ -1622,4 +1654,81 @@ public class Xpp3ReaderGenerator
         sc.add( objectName + ".set" + capitalise( singular( locationField ) ) + "( " + key + ", " + variable + " );" );
     }
 
+    private void writeVersionExtractors( JClass clazz, VersionDefinition definition )
+    {
+        XmlModelMetadata xmlModelMetadata = (XmlModelMetadata) getModel().getMetadata( XmlModelMetadata.ID );
+        
+        if( xmlModelMetadata.getNamespace() != null )
+        {
+            JMethod extractVersionFromNamespace = new JMethod( "extractVersionFromNamespace", new JType( "String" ), "the version extracted from the namespace" );
+            
+            extractVersionFromNamespace.addParameter( new JParameter( new JType( "String" ), "namespace" ) );
+            
+            JSourceCode sc = extractVersionFromNamespace.getSourceCode();
+            
+            String regex = toVersionGroupedRegexp( xmlModelMetadata.getNamespace() );
+            
+            sc.add( "java.util.regex.Matcher matcher = java.util.regex.Pattern.compile( \"" + regex.replace( "\\", "\\\\" ) + "\" ).matcher( namespace );" );
+            sc.add( "if( matcher.matches() )" );
+            sc.add( "{" );
+            sc.addIndented( "return matcher.group( 1 );" );
+            sc.add( "}" );
+            sc.add( "else" );
+            sc.add( "{" );
+            sc.addIndented( "return null;" );
+            sc.add( "}" );
+
+            clazz.addMethod( extractVersionFromNamespace );
+        }
+        
+        if( xmlModelMetadata.getSchemaLocation() != null )
+        {
+            JMethod extractVersionFromSchemaLocation = new JMethod( "extractVersionFromSchemaLocation", new JType( "String" ), "the version extracted from the schema location" );
+
+            extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "schemaLocation" ) );
+
+            JSourceCode sc = extractVersionFromSchemaLocation.getSourceCode();
+            
+            String regex = toVersionGroupedRegexp( xmlModelMetadata.getSchemaLocation() );
+            
+            sc.add( "java.util.regex.Matcher matcher = java.util.regex.Pattern.compile( \"" + regex.replace( "\\", "\\\\" ) + "\" ).matcher( schemaLocation );" );
+            sc.add( "if( matcher.matches() )" );
+            sc.add( "{" );
+            sc.addIndented( "return matcher.group( 1 );" );
+            sc.add( "}" );
+            sc.add( "else" );
+            sc.add( "{" );
+            sc.addIndented( "return null;" );
+            sc.add( "}" );
+
+            clazz.addMethod( extractVersionFromSchemaLocation );
+        }
+    }
+    
+    protected static String toVersionGroupedRegexp( String input )
+    {
+        StringBuilder result = new StringBuilder();
+        
+        Pattern p = Pattern.compile( "\\$\\{version\\}" );
+        Matcher m = p.matcher( input );
+        
+        int start = 0;
+        while( m.find() )
+        {
+            if( m.start() > start )
+            {
+                String part = input.substring( start, m.start() );
+                result.append( Pattern.quote( part ) );
+            }
+            result.append( "([0-9](\\.[0-9]){0,2})" );
+            start = m.end();
+        }
+        
+        if( start < input.length() )
+        {
+            result.append( Pattern.quote( input.substring( start ) )  );
+        }
+
+        return result.toString();
+    }
 }
