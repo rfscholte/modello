@@ -677,7 +677,7 @@ public class Xpp3ReaderGenerator
         }
 
         String versionCheck; 
-        if ( verifySupportedVersions() && !field.isModelVersionField() && !"0.0.0+".equals( field.getVersionRange().getValue() ) )
+        if ( verifySupportedVersions() && !field.isModelVersionField() && !getIgnoreableRanges().contains( field.getVersionRange().getValue() ) )
         {
             versionCheck = "versionInsideVersionRange(  " + VERSION_PARAM + ", \"" + field.getVersionRange().getValue() + "\" ) && ";
         }
