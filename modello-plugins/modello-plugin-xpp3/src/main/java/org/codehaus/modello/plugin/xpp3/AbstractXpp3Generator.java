@@ -141,6 +141,7 @@ public abstract class AbstractXpp3Generator
         for( Map.Entry<Version, Set<String>> entry : versionMap.entrySet() )
         {
             String field = entry.getKey().toString( "v", "_" );
+            entry.getValue().remove( "0.0.0+" ); // value for always, so can be ignored
             sc.add( "java.util.Set<String> " + field + " = new java.util.HashSet<String>();" );
             sc.add( "java.util.Collections.addAll( " + field + ", \"" + StringUtils.join( entry.getValue().iterator(), "\", \"" ) + "\" );" );
             sc.add( "supportedVersionRanges.put( \"" + entry.getKey().toString() + "\", " + field + " );" );
