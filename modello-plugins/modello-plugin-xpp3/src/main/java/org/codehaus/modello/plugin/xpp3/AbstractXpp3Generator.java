@@ -159,24 +159,44 @@ public abstract class AbstractXpp3Generator
         {
             return null;
         }
-        
-        
-        
-        JField supportedVersionRanges =  new JField( new JType( "java.util.Map<String, java.util.Set<String>>" ), "supportedVersionRanges" );  
+
+        JField supportedVersionRanges;  
+        if( useJava5 ) 
+        {
+            supportedVersionRanges =  new JField( new JType( "java.util.Map<String, java.util.Set<String>>" ), "supportedVersionRanges" );  
+        }
+        else
+        {
+            supportedVersionRanges =  new JField( new JType( "java.util.Map/*<String, java.util.Set<String>>*/" ), "supportedVersionRanges" );  
+        }
         supportedVersionRanges.getModifiers().makePrivate();
         supportedVersionRanges.getModifiers().setStatic( true );
         supportedVersionRanges.getModifiers().setFinal( true );
         clazz.addField( supportedVersionRanges );
         
         JSourceCode sc = clazz.getStaticInitializationCode();
-        sc.add( "supportedVersionRanges = new java.util.HashMap<String, java.util.Set<String>>();" );
+        if( useJava5 )
+        {
+            sc.add( "supportedVersionRanges = new java.util.HashMap<String, java.util.Set<String>>();" );
+        }
+        else
+        {
+            sc.add( "supportedVersionRanges = new java.util.HashMap/*<String, java.util.Set<String>>*/();" );
+        }
 
         Iterator<Map.Entry<Version, Set<String>>> iter = versionMap.entrySet().iterator();
         while( iter.hasNext() )
         {
             Map.Entry<Version, Set<String>> entry = iter.next();
             String field = entry.getKey().toString( "v", "_" );
-            sc.add( "java.util.Set<String> " + field + " = new java.util.HashSet<String>();" );
+            if( useJava5 )
+            {
+                sc.add( "java.util.Set<String> " + field + " = new java.util.HashSet<String>();" );
+            }
+            else
+            {
+                sc.add( "java.util.Set/*<String>*/ " + field + " = new java.util.HashSet/*<String>*/();" );
+            }
             if ( !entry.getValue().isEmpty() )
             {
                 sc.add( "java.util.Collections.addAll( " + field + ", \"" + StringUtils.join( entry.getValue().iterator(), "\", \"" ) + "\" );" );
