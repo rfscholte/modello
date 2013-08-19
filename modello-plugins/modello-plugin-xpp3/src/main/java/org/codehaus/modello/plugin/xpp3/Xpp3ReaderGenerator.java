@@ -1739,7 +1739,7 @@ public class Xpp3ReaderGenerator
                 String part = input.substring( start, m.start() );
                 result.append( Pattern.quote( part ) );
             }
-            result.append( "([0-9](\\.[0-9]){0,2})" );
+            result.append( "([0-9]+(\\.[0-9]+){0,2})" );
             start = m.end();
         }
         
