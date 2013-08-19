@@ -55,6 +55,8 @@ public class Xpp3SupportedVersionsVerifier
         verifyPom500ModelVersionWithPom400Namespace();
         
         verifyPom400ModelVersionWithPom500Namespace();
+        
+        verifyPom400ModelVersionWithBuildSourceEncoding();
     }
 
     public void verifyPom400()
@@ -149,6 +151,25 @@ public class Xpp3SupportedVersionsVerifier
         {
             Model model = modelReader.read( reader );
             fail( "Should fail since namespace and modelVersion are not in sync." );
+        }
+        catch ( XmlPullParserException e )
+        {
+        }
+    }
+    
+    public void verifyPom400ModelVersionWithBuildSourceEncoding()
+                    throws Exception
+    {
+        File file = new File( "src/test/verifiers/supportedVersions/pom400+buildSourceEncoding.xml" );
+
+        Reader reader = ReaderFactory.newXmlReader( file );
+
+        MavenXpp3Reader modelReader = new MavenXpp3Reader();
+
+        try
+        {
+            Model model = modelReader.read( reader );
+            fail( "Should fail since sourcEncoding is supported since 5.0.0." );
         }
         catch ( XmlPullParserException e )
         {
