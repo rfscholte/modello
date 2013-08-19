@@ -76,6 +76,8 @@ public class Xpp3ReaderGenerator
     private String parseArgs;
 
     private boolean requiresDomSupport;
+    
+    private boolean processNamespaces;
 
     protected boolean isLocationTracking()
     {
@@ -116,6 +118,8 @@ public class Xpp3ReaderGenerator
         if ( verifySupportedVersions() )
         {
             parseArgs += ", " + VERSION_PARAM;
+            
+            processNamespaces = getModel().getVersionDefinition().isNamespaceType(); 
         }
 
         try
@@ -274,7 +278,12 @@ public class Xpp3ReaderGenerator
 
         sc.add( "" );
 
-        sc.add( "" );
+        if( processNamespaces )
+        {
+            sc.add( "parser.setFeature( XmlPullParser.FEATURE_PROCESS_NAMESPACES ,true );" );
+
+            sc.add( "" );
+        }
 
         sc.add( "return " + readerMethodName + "( parser, strict" + readArgs + " );" );
 
@@ -365,6 +374,7 @@ public class Xpp3ReaderGenerator
         {
             jClass.addImport( "java.util.regex.Matcher" );
             jClass.addImport( "java.util.regex.Pattern" );
+            jClass.addImport( "org.codehaus.plexus.util.StringUtils" );
         }
 
         addModelImports( jClass, null );
@@ -572,43 +582,53 @@ public class Xpp3ReaderGenerator
                                                    JSourceCode sc, JClass jClass )
     {
         ModelField contentField = null;
-        
+
         if( rootElement && verifySupportedVersions() )
         {
             sc.add( "String " + VERSION_PARAM + " = null;" );
             sc.add(  "" );
+            
+            if ( processNamespaces )
+            {
+                sc.add( "String schemaLocation = parser.getAttributeValue( \"http://www.w3.org/2001/XMLSchema-instance\", \"schemaLocation\" );" );
+                sc.add( "String[] schemaLocationPairs = StringUtils.split( schemaLocation );" );
+                sc.add( "for ( int j = 1; " + VERSION_PARAM + " == null && j < schemaLocationPairs.length; j += 2 ) " );
+                sc.add( "{" );
+                sc.addIndented( VERSION_PARAM + " = extractVersionFromSchemaLocation( schemaLocationPairs[j] );" );
+                sc.add( "}" );
+                sc.add( "" );
+                sc.add( "if( " + VERSION_PARAM + " == null )" );
+                sc.add( "{" );
+                sc.addIndented( VERSION_PARAM + " = extractVersionFromNamespace( parser.getNamespace( null ) );" );
+                sc.add( "}" );
+                sc.add( "" );
+            }
         }
 
         sc.add( "for ( int i = parser.getAttributeCount() - 1; i >= 0; i-- )" );
         sc.add( "{" );
         sc.indent();
-        sc.add( "String name = parser.getAttributeName( i );" );
+        if ( processNamespaces )
+        {
+            sc.add( "String name = ( StringUtils.isEmpty( parser.getAttributePrefix( i ) ) ? \"\" : parser.getAttributePrefix( i ) + \":\"  ) + parser.getAttributeName( i );" );
+        }
+        else
+        {
+            sc.add( "String name = parser.getAttributeName( i );" );
+        }
         sc.add( "String value = parser.getAttributeValue( i );" );
         sc.add( "" );
 
-        /* @todo  - Discover prefix for 'http://www.w3.org/2001/XMLSchema-instance'
-         *        - Discover value of default namespace (i.e. xmlns) 
-         *        - Read 'prefix':schemaLocation and search for the value of default namespace
-         *        - extract version of its xsd location, which is preferred above default namespace value 
-         */
         sc.add( "if ( name.indexOf( ':' ) >= 0 )" );
         sc.add( "{" );
         sc.addIndented( "// just ignore attributes with non-default namespace (for example: xmlns:xsi)" );
         sc.add( "}" );
-        if ( rootElement )
+        if ( rootElement && !processNamespaces )
         {
             sc.add( "else if ( \"xmlns\".equals( name ) )" );
             sc.add( "{" );
-            if( verifySupportedVersions() && getModel().getVersionDefinition().isNamespaceType() )
-            {
-                sc.addIndented( VERSION_PARAM + " = extractVersionFromNamespace( value );" );
-            }
-            else
-            {
-                sc.addIndented( "// ignore xmlns attribute in root class, which is a reserved attribute name" );
-            }
+            sc.addIndented( "// ignore xmlns attribute in root class, which is a reserved attribute name" );
             sc.add( "}" );
-            
         }
 
         for ( ModelField field : modelFields )
@@ -1698,20 +1718,13 @@ public class Xpp3ReaderGenerator
             extractVersionFromSchemaLocation.getModifiers().makePrivate();
 
             extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "schemaLocation" ) );
-//            extractVersionFromSchemaLocation.addParameter( new JParameter( new JType( "String" ), "namespace" ) );
-            
-            /* @todo Improve:
-             *       - Separate 'schemaLocation' in key/value pairs
-             *       - Get the value by the 'namespace' parameter
-             *       - extract its version 
-             */
 
             JSourceCode sc = extractVersionFromSchemaLocation.getSourceCode();
             
             String regex = toVersionGroupedRegexp( xmlModelMetadata.getSchemaLocation() );
             
             sc.add( "Matcher matcher = Pattern.compile( \"" + StringUtils.escape( regex ) + "\" ).matcher( schemaLocation );" );
-            sc.add( "if( matcher.find() )" );
+            sc.add( "if( matcher.matches() )" );
             sc.add( "{" );
             sc.addIndented( "return matcher.group( 1 );" );
             sc.add( "}" );
