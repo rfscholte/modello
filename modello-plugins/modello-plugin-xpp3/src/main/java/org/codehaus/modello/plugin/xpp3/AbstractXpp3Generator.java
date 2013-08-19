@@ -163,11 +163,11 @@ public abstract class AbstractXpp3Generator
         JField supportedVersionRanges;  
         if( useJava5 ) 
         {
-            supportedVersionRanges =  new JField( new JType( "java.util.Map<String, java.util.Set<String>>" ), "supportedVersionRanges" );  
+            supportedVersionRanges =  new JField(  new JType( "java.util.Map<String, java.util.Set<String>>" ), "supportedVersions" );  
         }
         else
         {
-            supportedVersionRanges =  new JField( new JType( "java.util.Map/*<String, java.util.Set<String>>*/" ), "supportedVersionRanges" );  
+            supportedVersionRanges =  new JField( new JType( "java.util.Map/*<String, java.util.Set<String>>*/" ), "supportedVersions" );  
         }
         supportedVersionRanges.getModifiers().makePrivate();
         supportedVersionRanges.getModifiers().setStatic( true );
@@ -177,11 +177,11 @@ public abstract class AbstractXpp3Generator
         JSourceCode sc = clazz.getStaticInitializationCode();
         if( useJava5 )
         {
-            sc.add( "supportedVersionRanges = new java.util.HashMap<String, java.util.Set<String>>();" );
+            sc.add( "supportedVersions = new java.util.HashMap<String, java.util.Set<String>>();" );
         }
         else
         {
-            sc.add( "supportedVersionRanges = new java.util.HashMap/*<String, java.util.Set<String>>*/();" );
+            sc.add( "supportedVersions = new java.util.HashMap/*<String, java.util.Set<String>>*/();" );
         }
 
         Iterator<Map.Entry<Version, Set<String>>> iter = versionMap.entrySet().iterator();
@@ -201,7 +201,7 @@ public abstract class AbstractXpp3Generator
             {
                 sc.add( "java.util.Collections.addAll( " + field + ", \"" + StringUtils.join( entry.getValue().iterator(), "\", \"" ) + "\" );" );
             }
-            sc.add( "supportedVersionRanges.put( \"" + entry.getKey().toString() + "\", " + field + " );" );
+            sc.add( "supportedVersions.put( \"" + entry.getKey().toString() + "\", " + field + " );" );
             
             if( iter.hasNext() )
             {
@@ -213,7 +213,7 @@ public abstract class AbstractXpp3Generator
         versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "version" ) );
         versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "versionRange" ) );
         sc = versionInsideVersionRange.getSourceCode();
-        sc.add( "if ( version == null || !supportedVersionRanges.containsKey( version ) )" );
+        sc.add( "if ( version == null || !supportedVersions.containsKey( version ) )" );
         sc.add( "{" );
         String hint;
         if ( versionDefinition.isNamespaceType() )
@@ -232,7 +232,7 @@ public abstract class AbstractXpp3Generator
         sc.add( "}" );
         sc.add( "else" );
         sc.add( "{" );
-        sc.addIndented( "return supportedVersionRanges.get( version ).contains( versionRange );" );
+        sc.addIndented( "return supportedVersions.get( version ).contains( versionRange );" );
         sc.add( "}" );
         clazz.addMethod( versionInsideVersionRange );
         
