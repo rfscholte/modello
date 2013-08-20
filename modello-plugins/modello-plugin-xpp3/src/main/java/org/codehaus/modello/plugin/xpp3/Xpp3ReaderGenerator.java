@@ -61,8 +61,6 @@ public class Xpp3ReaderGenerator
 
     private static final String SOURCE_PARAM = "source";
 
-    private static final String VERSION_PARAM = "_version"; // prefix with _ to prevent name collision
-
     private static final String LOCATION_VAR = "_location";
 
     private ModelClass locationTracker;

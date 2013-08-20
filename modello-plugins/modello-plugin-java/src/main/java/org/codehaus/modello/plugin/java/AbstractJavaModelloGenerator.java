@@ -31,13 +31,19 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.codehaus.modello.ModelloException;
 import org.codehaus.modello.ModelloParameterConstants;
 import org.codehaus.modello.model.BaseElement;
+import org.codehaus.modello.model.CodeSegment;
 import org.codehaus.modello.model.Model;
 import org.codehaus.modello.model.ModelAssociation;
 import org.codehaus.modello.model.ModelClass;
@@ -45,12 +51,20 @@ import org.codehaus.modello.model.ModelDefault;
 import org.codehaus.modello.model.ModelField;
 import org.codehaus.modello.model.ModelInterface;
 import org.codehaus.modello.model.ModelType;
+import org.codehaus.modello.model.Version;
+import org.codehaus.modello.model.VersionDefinition;
+import org.codehaus.modello.model.VersionRange;
 import org.codehaus.modello.plugin.AbstractModelloGenerator;
 import org.codehaus.modello.plugin.java.javasource.JClass;
 import org.codehaus.modello.plugin.java.javasource.JComment;
+import org.codehaus.modello.plugin.java.javasource.JField;
 import org.codehaus.modello.plugin.java.javasource.JInterface;
+import org.codehaus.modello.plugin.java.javasource.JMethod;
+import org.codehaus.modello.plugin.java.javasource.JParameter;
+import org.codehaus.modello.plugin.java.javasource.JSourceCode;
 import org.codehaus.modello.plugin.java.javasource.JSourceWriter;
 import org.codehaus.modello.plugin.java.javasource.JStructure;
+import org.codehaus.modello.plugin.java.javasource.JType;
 import org.codehaus.modello.plugin.java.metadata.JavaClassMetadata;
 import org.codehaus.modello.plugin.java.metadata.JavaFieldMetadata;
 import org.codehaus.modello.plugin.java.metadata.JavaModelMetadata;
@@ -71,6 +85,14 @@ public abstract class AbstractJavaModelloGenerator
 
     protected boolean domAsXpp3 = true;
 
+    protected List<Version> supportedVersions;
+
+    protected Map<Version, Set<String>> versionMap = new HashMap<Version, Set<String>>();
+
+    protected Set<String> ignoreableRanges = new HashSet<String>();
+    
+    protected static final String VERSION_PARAM = "_version"; // prefix with _ to prevent name collision
+
     protected void initialize( Model model, Properties parameters )
         throws ModelloException
     {
@@ -80,6 +102,75 @@ public abstract class AbstractJavaModelloGenerator
                                                   ModelloParameterConstants.USE_JAVA5, "false" ) ).booleanValue();
 
         domAsXpp3 = !"false".equals( parameters.getProperty( ModelloParameterConstants.DOM_AS_XPP3 ) );
+        
+        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
+        
+        if ( versions != null )
+        {
+            supportedVersions = new ArrayList<Version>();
+            for( String version : versions.split( "," ) )
+            {
+                supportedVersions.add( new Version( version ) );
+            }
+            
+            for( Version version : supportedVersions )
+            {
+                Set<String> validRanges = new HashSet<String>();
+                
+                for( ModelClass modelClass : getModel().getClasses( version ) )
+                {
+                    validRanges.add( modelClass.getVersionRange().getValue() );
+                    
+                    for( CodeSegment codeSegment : modelClass.getCodeSegments( version ) )
+                    {
+                        validRanges.add( codeSegment.getVersionRange().getValue() );
+                    }
+                    
+                    for( ModelField modelField : modelClass.getFields( version ) )
+                    {
+                        validRanges.add( modelField.getVersionRange().getValue() );
+                    }
+                }
+                
+                for( ModelInterface modelInterface: getModel().getInterfaces( version ) )
+                {
+                    validRanges.add( modelInterface.getVersionRange().getValue() );
+                    
+                    for( CodeSegment codeSegment : modelInterface.getCodeSegments( version ) )
+                    {
+                        validRanges.add( codeSegment.getVersionRange().getValue() );
+                    }
+                    
+                    for( ModelField modelField : modelInterface.getFields( version ) )
+                    {
+                        validRanges.add( modelField.getVersionRange().getValue() );
+                    }
+                }
+                versionMap.put( version, validRanges );
+            }
+            
+            // clean up ranges
+            Set<String> versionRangesSet = new HashSet<String>( versionMap.entrySet().iterator().next().getValue() );
+            outer: for( String versionRange : versionRangesSet )
+            {
+                //check if versionRange applies to every version
+                VersionRange range = new VersionRange( versionRange );
+                for( Version version : versionMap.keySet() )
+                {
+                    if( !version.inside( range ) )
+                    {
+                        continue outer;
+                    }
+                }
+                
+                // versionRange applies to every version, so it can be ignored
+                ignoreableRanges.add(  versionRange );
+                for( Set<String> ranges : versionMap.values() )
+                {
+                     ranges.remove( versionRange );
+                }
+            }
+        }
     }
 
     /**
@@ -373,6 +464,107 @@ public abstract class AbstractJavaModelloGenerator
             return true;
         }
         return false;
+    }
+
+    protected final List<Version> getSupportedVersions()
+    {
+        return supportedVersions;
+    }
+
+    protected final Set<String> getIgnoreableRanges()
+    {
+        return ignoreableRanges;
+    }
+
+    protected boolean verifySupportedVersions()
+    {
+        return getSupportedVersions() != null && !getSupportedVersions().isEmpty();
+    }
+
+    protected JField writeInitializeVersionInsideVersionRange( JClass clazz, VersionDefinition versionDefinition )
+    {
+        if( supportedVersions == null )
+        {
+            return null;
+        }
+    
+        JField supportedVersionRanges;  
+        if( useJava5 ) 
+        {
+            supportedVersionRanges =  new JField(  new JType( "java.util.Map<String, java.util.Set<String>>" ), "supportedVersions" );  
+        }
+        else
+        {
+            supportedVersionRanges =  new JField( new JType( "java.util.Map/*<String, java.util.Set<String>>*/" ), "supportedVersions" );  
+        }
+        supportedVersionRanges.getModifiers().makePrivate();
+        supportedVersionRanges.getModifiers().setStatic( true );
+        supportedVersionRanges.getModifiers().setFinal( true );
+        clazz.addField( supportedVersionRanges );
+        
+        JSourceCode sc = clazz.getStaticInitializationCode();
+        if( useJava5 )
+        {
+            sc.add( "supportedVersions = new java.util.HashMap<String, java.util.Set<String>>();" );
+        }
+        else
+        {
+            sc.add( "supportedVersions = new java.util.HashMap/*<String, java.util.Set<String>>*/();" );
+        }
+    
+        Iterator<Map.Entry<Version, Set<String>>> iter = versionMap.entrySet().iterator();
+        while( iter.hasNext() )
+        {
+            Map.Entry<Version, Set<String>> entry = iter.next();
+            String field = entry.getKey().toString( "v", "_" );
+            if( useJava5 )
+            {
+                sc.add( "java.util.Set<String> " + field + " = new java.util.HashSet<String>();" );
+            }
+            else
+            {
+                sc.add( "java.util.Set/*<String>*/ " + field + " = new java.util.HashSet/*<String>*/();" );
+            }
+            if ( !entry.getValue().isEmpty() )
+            {
+                sc.add( "java.util.Collections.addAll( " + field + ", \"" + StringUtils.join( entry.getValue().iterator(), "\", \"" ) + "\" );" );
+            }
+            sc.add( "supportedVersions.put( \"" + entry.getKey().toString() + "\", " + field + " );" );
+            
+            if( iter.hasNext() )
+            {
+                sc.add( "" );
+            }
+        }
+        
+        JMethod versionInsideVersionRange = new JMethod( "versionInsideVersionRange", JType.BOOLEAN, "Check if version is inside versionRange" );
+        versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "version" ) );
+        versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "versionRange" ) );
+        sc = versionInsideVersionRange.getSourceCode();
+        sc.add( "if ( version == null || !supportedVersions.containsKey( version ) )" );
+        sc.add( "{" );
+        String hint;
+        if ( versionDefinition.isNamespaceType() )
+        {
+            hint = "Please specify the namespace in the rootelement of the xml.";
+        }
+        else if ( versionDefinition.isFieldType() )
+        {
+            hint = "Please start the xml by specifying '" + versionDefinition+  "'.";
+        }
+        else
+        {
+            hint = "";
+        }
+        sc.addIndented( "throw new RuntimeException( \"Can't determine version. " + hint + "\" );" );
+        sc.add( "}" );
+        sc.add( "else" );
+        sc.add( "{" );
+        sc.addIndented( "return supportedVersions.get( version ).contains( versionRange );" );
+        sc.add( "}" );
+        clazz.addMethod( versionInsideVersionRange );
+        
+        return supportedVersionRanges;
     }
 
 }

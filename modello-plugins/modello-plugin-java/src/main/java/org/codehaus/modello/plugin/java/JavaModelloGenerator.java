@@ -75,25 +75,11 @@ public class JavaModelloGenerator
         new String[]{ "boolean", "Boolean", "byte", "Byte", "char", "Character", "short", "Short", "int", "Integer",
             "long", "Long", "float", "Float", "double", "Double", "String" } ) );
 
-    private List<Version> supportedVersions;
-    
-    
     public void generate( Model model, Properties parameters )
         throws ModelloException
     {
         initialize( model, parameters );
         
-        String versions = parameters.getProperty( ModelloParameterConstants.SUPPORTED_VERSIONS );
-        
-        if ( versions != null )
-        {
-            supportedVersions = new ArrayList<Version>();
-            for( String version : versions.split( "," ) )
-            {
-                supportedVersions.add( new Version( version ) );
-            }
-        }
-
         try
         {
             generateJava();
@@ -1188,7 +1174,7 @@ public class JavaModelloGenerator
 
         JField field = new JField( type, modelField.getName() );
 
-        if ( modelField.isModelVersionField() && ( supportedVersions == null || supportedVersions.size() <= 1 ) )
+        if ( modelField.isModelVersionField() && ( getSupportedVersions() == null || getSupportedVersions().size() <= 1 ) )
         {
             field.setInitString( "\"" + getGeneratedVersion() + "\"" );
         }
