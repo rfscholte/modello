@@ -608,18 +608,18 @@ public class Xpp3ReaderGenerator
         sc.add( "for ( int i = parser.getAttributeCount() - 1; i >= 0; i-- )" );
         sc.add( "{" );
         sc.indent();
-        if ( processNamespaces )
-        {
-            sc.add( "String name = ( StringUtils.isEmpty( parser.getAttributePrefix( i ) ) ? \"\" : parser.getAttributePrefix( i ) + \":\"  ) + parser.getAttributeName( i );" );
-        }
-        else
-        {
-            sc.add( "String name = parser.getAttributeName( i );" );
-        }
+        sc.add( "String name = parser.getAttributeName( i );" );
         sc.add( "String value = parser.getAttributeValue( i );" );
         sc.add( "" );
 
-        sc.add( "if ( name.indexOf( ':' ) >= 0 )" );
+        if ( processNamespaces )
+        {
+            sc.add( "if ( !StringUtils.isEmpty( parser.getAttributePrefix( i ) ) )" );
+        }
+        else
+        {
+            sc.add( "if ( name.indexOf( ':' ) >= 0 )" );
+        }
         sc.add( "{" );
         sc.addIndented( "// just ignore attributes with non-default namespace (for example: xmlns:xsi)" );
         sc.add( "}" );
