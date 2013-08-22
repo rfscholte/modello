@@ -540,6 +540,7 @@ public abstract class AbstractJavaModelloGenerator
         JMethod versionInsideVersionRange = new JMethod( "versionInsideVersionRange", JType.BOOLEAN, "Check if version is inside versionRange" );
         versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "version" ) );
         versionInsideVersionRange.addParameter( new JParameter( new JType( "String" ), "versionRange" ) );
+        versionInsideVersionRange.getModifiers().makePrivate();
         sc = versionInsideVersionRange.getSourceCode();
         sc.add( "if ( version == null || !supportedVersions.containsKey( version ) )" );
         sc.add( "{" );
