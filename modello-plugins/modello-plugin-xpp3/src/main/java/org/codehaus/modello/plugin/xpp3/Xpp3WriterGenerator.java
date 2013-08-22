@@ -54,6 +54,9 @@ public class Xpp3WriterGenerator
 {
     private boolean requiresDomSupport;
     
+    private static final String IGNOREVERSIONCONFLICT_PARAM = "ignoreVersionConflicts";
+
+    
     public void generate( Model model, Properties parameters )
         throws ModelloException
     {
@@ -110,16 +113,36 @@ public class Xpp3WriterGenerator
         // ----------------------------------------------------------------------
         // Write the write( Writer, Model ) method which will do the unmarshalling.
         // ----------------------------------------------------------------------
+        
+        String writeRootArgs = verifySupportedVersions() ? ", " + IGNOREVERSIONCONFLICT_PARAM : "";
+
+        String rootElementParameterName = uncapitalise( root );
 
         JMethod marshall = new JMethod( "write" );
 
-        String rootElementParameterName = uncapitalise( root );
         marshall.addParameter( new JParameter( new JClass( "Writer" ), "writer" ) );
         marshall.addParameter( new JParameter( new JClass( root ), rootElementParameterName ) );
 
         marshall.addException( new JClass( "java.io.IOException" ) );
 
-        JSourceCode sc = marshall.getSourceCode();
+        JSourceCode sc;
+        
+        if ( verifySupportedVersions() )
+        {
+            sc = marshall.getSourceCode();
+            sc.add( "write( writer, " + rootElementParameterName + ", false );" );
+            jClass.addMethod( marshall );
+            
+            marshall = new JMethod( "write" );
+
+            marshall.addParameter( new JParameter( new JClass( "Writer" ), "writer" ) );
+            marshall.addParameter( new JParameter( new JClass( root ), rootElementParameterName ) );
+            marshall.addParameter( new JParameter( JType.BOOLEAN, IGNOREVERSIONCONFLICT_PARAM ) );
+            marshall.addException( new JClass( "java.io.IOException" ) );
+            marshall.addException( new JClass( "java.lang.IllegalArgumentException" ) );
+        }
+        
+        sc = marshall.getSourceCode();
 
         sc.add( "XmlSerializer serializer = new MXSerializer();" );
 
@@ -133,7 +156,7 @@ public class Xpp3WriterGenerator
 
         sc.add( "serializer.startDocument( " + rootElementParameterName + ".getModelEncoding(), null );" );
 
-        sc.add( "write" + root + "( " + rootElementParameterName + ", \"" + rootElement + "\", serializer );" );
+        sc.add( "write" + root + "( " + rootElementParameterName + ", \"" + rootElement + "\", serializer" + writeRootArgs + " );" );
 
         sc.add( "serializer.endDocument();" );
 
@@ -147,8 +170,24 @@ public class Xpp3WriterGenerator
 
         marshall.addParameter( new JParameter( new JClass( "OutputStream" ), "stream" ) );
         marshall.addParameter( new JParameter( new JClass( root ), rootElementParameterName ) );
-
         marshall.addException( new JClass( "java.io.IOException" ) );
+        
+        if( verifySupportedVersions() )
+        {
+            sc = marshall.getSourceCode();
+            sc.add( "write( stream, " + rootElementParameterName + ", false );" );
+            jClass.addMethod( marshall );
+            
+            marshall = new JMethod( "write" );
+//            marshall.getJDocComment().appendComment( "if {@code ignoreVersionConflicts} is {@code false}, "
+//                + "an IllegalArgumentException is thrown when there's a version conflict." );
+
+            marshall.addParameter( new JParameter( new JClass( "OutputStream" ), "stream" ) );
+            marshall.addParameter( new JParameter( new JClass( root ), rootElementParameterName ) );
+            marshall.addParameter( new JParameter( JType.BOOLEAN, IGNOREVERSIONCONFLICT_PARAM ) );
+            marshall.addException( new JClass( "java.io.IOException" ) );
+            marshall.addException( new JClass( "java.lang.IllegalArgumentException" ) );
+        }
 
         sc = marshall.getSourceCode();
 
@@ -164,7 +203,7 @@ public class Xpp3WriterGenerator
 
         sc.add( "serializer.startDocument( " + rootElementParameterName + ".getModelEncoding(), null );" );
 
-        sc.add( "write" + root + "( " + rootElementParameterName + ", \"" + rootElement + "\", serializer );" );
+        sc.add( "write" + root + "( " + rootElementParameterName + ", \"" + rootElement + "\", serializer" + writeRootArgs + " );" );
 
         sc.add( "serializer.endDocument();" );
 
@@ -172,6 +211,11 @@ public class Xpp3WriterGenerator
 
         writeAllClasses( objectModel, jClass );
 
+        if( verifySupportedVersions() )
+        {
+            writeInitializeVersionInsideVersionRange( jClass, objectModel.getVersionDefinition() );
+        }
+        
         if ( requiresDomSupport )
         {
             createWriteDomMethod( jClass );
@@ -234,8 +278,14 @@ public class Xpp3WriterGenerator
         marshall.addParameter( new JParameter( new JClass( className ), uncapClassName ) );
         marshall.addParameter( new JParameter( new JClass( "String" ), "tagName" ) );
         marshall.addParameter( new JParameter( new JClass( "XmlSerializer" ), "serializer" ) );
-
+        
         marshall.addException( new JClass( "java.io.IOException" ) );
+        
+        if( verifySupportedVersions() )
+        {
+            marshall.addParameter( new JParameter( JType.BOOLEAN, IGNOREVERSIONCONFLICT_PARAM ) );
+            marshall.addException( new JClass( "java.lang.IllegalArgumentException" ) );
+        }
 
         marshall.getModifiers().makePrivate();
 
@@ -243,6 +293,12 @@ public class Xpp3WriterGenerator
 
         ModelClassMetadata classMetadata = (ModelClassMetadata) modelClass.getMetadata( ModelClassMetadata.ID );
 
+        if( !classMetadata.isRootElement() && verifySupportedVersions() )
+        {
+            marshall.addParameter( new JParameter( new JClass( "String" ), VERSION_PARAM ) );
+        }
+
+        
         String namespaceValue = null;
         String namespaceMethod = null;
 
@@ -253,12 +309,13 @@ public class Xpp3WriterGenerator
         {
             if ( getModel().getVersionDefinition() != null && verifySupportedVersions() )
             {
+                sc.add( "String " + VERSION_PARAM + ";" );
                 if ( getModel().getVersionDefinition().isFieldType() )
                 {
                     String modelVersionGetter =
                         uncapClassName + ".get" + capitalise( getModel().getVersionDefinition().getValue() ) + "()";
 
-                    namespaceMethod = "getNamespace( " + modelVersionGetter + " )";
+                    namespaceMethod = "getNamespace( " + VERSION_PARAM + " = " + modelVersionGetter + " )";
 
                     sc.add( "serializer.setPrefix( \"\", " + namespaceMethod + " );" );
                 }
@@ -368,10 +425,14 @@ public class Xpp3WriterGenerator
             if ( xmlFieldMetadata.isAttribute() )
             {
                 sc.add( getValueChecker( type, value, field ) );
-
-                sc.add( "{" );
-                sc.addIndented( "serializer.attribute( NAMESPACE, \"" + fieldTagName + "\", "
+                
+                JSourceCode codeblock = new JSourceCode( "serializer.attribute( NAMESPACE, \"" + fieldTagName + "\", "
                                 + getValue( field.getType(), value, xmlFieldMetadata ) + " );" );
+                
+                sc.add( "{" );
+                sc.indent();
+                writeVersionCheck( sc, field, value, codeblock );
+                sc.unindent();
                 sc.add( "}" );
             }
 
@@ -407,6 +468,8 @@ public class Xpp3WriterGenerator
                 continue;
             }
 
+            String writeArgs = verifySupportedVersions() ? ", " + IGNOREVERSIONCONFLICT_PARAM + ", " + VERSION_PARAM : "";
+            
             if ( field instanceof ModelAssociation )
             {
                 ModelAssociation association = (ModelAssociation) field;
@@ -415,11 +478,13 @@ public class Xpp3WriterGenerator
 
                 if ( association.isOneMultiplicity() )
                 {
+                    JSourceCode codeblock = new JSourceCode( "write" + association.getTo() + "( (" + association.getTo() + ") " + value + ", \""
+                                    + fieldTagName + "\", serializer" + writeArgs + " );" );
                     sc.add( getValueChecker( type, value, association ) );
-
                     sc.add( "{" );
-                    sc.addIndented( "write" + association.getTo() + "( (" + association.getTo() + ") " + value + ", \""
-                                    + fieldTagName + "\", serializer );" );
+                    sc.indent();
+                    writeVersionCheck( sc, field, value, codeblock );
+                    sc.unindent();
                     sc.add( "}" );
                 }
                 else
@@ -430,6 +495,8 @@ public class Xpp3WriterGenerator
                         (XmlAssociationMetadata) association.getAssociationMetadata( XmlAssociationMetadata.ID );
 
                     String valuesTagName = resolveTagName( fieldTagName, xmlAssociationMetadata );
+                    
+                    
 
                     type = association.getType();
                     String toType = association.getTo();
@@ -439,44 +506,47 @@ public class Xpp3WriterGenerator
                     if ( ModelDefault.LIST.equals( type ) || ModelDefault.SET.equals( type ) )
                     {
                         sc.add( getValueChecker( type, value, association ) );
-
                         sc.add( "{" );
                         sc.indent();
+
+                        JSourceCode codeblock = new JSourceCode();
 
                         if ( wrappedItems )
                         {
-                            sc.add( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
+                            codeblock.add( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
                         }
 
-                        sc.add( "for ( Iterator iter = " + value + ".iterator(); iter.hasNext(); )" );
+                        codeblock.add( "for ( Iterator iter = " + value + ".iterator(); iter.hasNext(); )" );
 
-                        sc.add( "{" );
-                        sc.indent();
+                        codeblock.add( "{" );
+                        codeblock.indent();
 
                         if ( isClassInModel( association.getTo(), modelClass.getModel() ) )
                         {
-                            sc.add( toType + " o = (" + toType + ") iter.next();" );
+                            codeblock.add( toType + " o = (" + toType + ") iter.next();" );
 
-                            sc.add( "write" + toType + "( o, \"" + valuesTagName + "\", serializer );" );
+                            codeblock.add( "write" + toType + "( o, \"" + valuesTagName + "\", serializer" + writeArgs + " );" );
                         }
                         else
                         {
-                            sc.add( toType + " " + singular( uncapitalise( field.getName() ) ) + " = (" + toType
+                            codeblock.add( toType + " " + singular( uncapitalise( field.getName() ) ) + " = (" + toType
                                 + ") iter.next();" );
 
-                            sc.add( "serializer.startTag( NAMESPACE, " + "\"" + valuesTagName + "\" ).text( "
+                            codeblock.add( "serializer.startTag( NAMESPACE, " + "\"" + valuesTagName + "\" ).text( "
                                 + singular( uncapitalise( field.getName() ) ) + " ).endTag( NAMESPACE, " + "\""
                                 + valuesTagName + "\" );" );
                         }
 
-                        sc.unindent();
-                        sc.add( "}" );
+                        codeblock.unindent();
+                        codeblock.add( "}" );
 
                         if ( wrappedItems )
                         {
-                            sc.add( "serializer.endTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
+                            codeblock.add( "serializer.endTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
                         }
 
+                        writeVersionCheck( sc, field, value, codeblock );
+                        
                         sc.unindent();
                         sc.add( "}" );
                     }
@@ -489,43 +559,46 @@ public class Xpp3WriterGenerator
                         sc.add( "{" );
                         sc.indent();
 
+                        JSourceCode codeblock = new JSourceCode();
                         if ( wrappedItems )
                         {
-                            sc.add( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
+                            codeblock.add( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
                         }
 
-                        sc.add( "for ( Iterator iter = " + value + ".keySet().iterator(); iter.hasNext(); )" );
+                        codeblock.add( "for ( Iterator iter = " + value + ".keySet().iterator(); iter.hasNext(); )" );
 
-                        sc.add( "{" );
-                        sc.indent();
+                        codeblock.add( "{" );
+                        codeblock.indent();
 
-                        sc.add( "String key = (String) iter.next();" );
+                        codeblock.add( "String key = (String) iter.next();" );
 
-                        sc.add( "String value = (String) " + value + ".get( key );" );
+                        codeblock.add( "String value = (String) " + value + ".get( key );" );
 
                         if ( xmlAssociationMetadata.isMapExplode() )
                         {
-                            sc.add( "serializer.startTag( NAMESPACE, \"" + singular( associationName ) + "\" );" );
-                            sc.add(
+                            codeblock.add( "serializer.startTag( NAMESPACE, \"" + singular( associationName ) + "\" );" );
+                            codeblock.add(
                                 "serializer.startTag( NAMESPACE, \"key\" ).text( key ).endTag( NAMESPACE, \"key\" );" );
-                            sc.add(
+                            codeblock.add(
                                 "serializer.startTag( NAMESPACE, \"value\" ).text( value ).endTag( NAMESPACE, \"value\" );" );
-                            sc.add( "serializer.endTag( NAMESPACE, \"" + singular( associationName ) + "\" );" );
+                            codeblock.add( "serializer.endTag( NAMESPACE, \"" + singular( associationName ) + "\" );" );
                         }
                         else
                         {
-                            sc.add(
+                            codeblock.add(
                                 "serializer.startTag( NAMESPACE, \"\" + key + \"\" ).text( value ).endTag( NAMESPACE, \"\" + key + \"\" );" );
                         }
 
-                        sc.unindent();
-                        sc.add( "}" );
+                        codeblock.unindent();
+                        codeblock.add( "}" );
 
                         if ( wrappedItems )
                         {
-                            sc.add( "serializer.endTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
+                            codeblock.add( "serializer.endTag( NAMESPACE, " + "\"" + fieldTagName + "\" );" );
                         }
 
+                        writeVersionCheck( sc, field, value, codeblock );
+                        
                         sc.unindent();
                         sc.add( "}" );
                     }
@@ -536,27 +609,36 @@ public class Xpp3WriterGenerator
                 sc.add( getValueChecker( type, value, field ) );
 
                 sc.add( "{" );
+                sc.indent();
+
+                JSourceCode codeblock = new JSourceCode();
+
                 if ( "DOM".equals( field.getType() ) )
                 {
                     if ( domAsXpp3 )
                     {
                         jClass.addImport( "org.codehaus.plexus.util.xml.Xpp3Dom" );
+                        
     
-                        sc.addIndented( "((Xpp3Dom) " + value + ").writeToSerializer( NAMESPACE, serializer );" );
+                        codeblock = new JSourceCode( "((Xpp3Dom) " + value + ").writeToSerializer( NAMESPACE, serializer );" );
                     }
                     else
                     {
-                        sc.addIndented( "writeDom( (org.w3c.dom.Element) " + value + ", serializer );" );
+                        codeblock = new JSourceCode( "writeDom( (org.w3c.dom.Element) " + value + ", serializer );" );
                     }
 
                     requiresDomSupport = true;
                 }
                 else
                 {
-                    sc.addIndented( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" ).text( "
-                        + getValue( field.getType(), value, xmlFieldMetadata ) + " ).endTag( NAMESPACE, " + "\""
-                        + fieldTagName + "\" );" );
+                    codeblock = new JSourceCode( "serializer.startTag( NAMESPACE, " + "\"" + fieldTagName + "\" ).text( "
+                                    + getValue( field.getType(), value, xmlFieldMetadata ) + " ).endTag( NAMESPACE, " + "\""
+                                    + fieldTagName + "\" );" );
+
                 }
+                writeVersionCheck( sc, field, value, codeblock );
+
+                sc.unindent();
                 sc.add( "}" );
             }
         }
@@ -564,6 +646,31 @@ public class Xpp3WriterGenerator
         sc.add( "serializer.endTag( NAMESPACE, tagName );" );
 
         jClass.addMethod( marshall );
+    }
+
+    private void writeVersionCheck( JSourceCode sc, ModelField field, String value, JSourceCode serializeCodeblock )
+    {
+        if ( verifySupportedVersions() && !getIgnoreableRanges().contains( field.getVersionRange().getValue() ) )
+        {
+            sc.add( "if ( versionInsideVersionRange(  " + VERSION_PARAM + ", \"" + field.getVersionRange().getValue() + "\" ) )" );
+            sc.add( "{" );
+            sc.indent();
+            serializeCodeblock.copyInto( sc );
+            sc.unindent();
+            sc.add( "}" );
+            sc.add( "else if ( !" + IGNOREVERSIONCONFLICT_PARAM + "  )" );
+            sc.add( "{" );
+            sc.addIndented( "throw new IllegalArgumentException( \"" + value + " is not supported for version  \" + " + VERSION_PARAM + " );" );
+            sc.add( "}" );
+            sc.add( "else" );
+            sc.add( "{" );
+            sc.addIndented( "// silently ignore" );
+            sc.add( "}" );
+        }
+        else
+        {
+            serializeCodeblock.copyInto( sc );
+        }
     }
 
     private void createWriteDomMethod( JClass jClass )

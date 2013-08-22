@@ -25,9 +25,11 @@ package org.codehaus.modello.generator.xml.xpp3;
 import java.io.File;
 import java.io.Reader;
 import java.io.StringWriter;
+import java.io.ByteArrayOutputStream;
 
 import junit.framework.Assert;
 
+import org.apache.maven.model.Build;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
@@ -48,18 +50,20 @@ public class Xpp3SupportedVersionsVerifier
     public void verify()
         throws Throwable
     {
-        verifyPom400();
+        verifyReaderPom400();
 
-        verifyPom500();
+        verifyReaderPom500();
         
-        verifyPom500ModelVersionWithPom400Namespace();
+        verifyReaderPom500ModelVersionWithPom400Namespace();
         
-        verifyPom400ModelVersionWithPom500Namespace();
+        verifyReaderPom400ModelVersionWithPom500Namespace();
         
-        verifyPom400ModelVersionWithBuildSourceEncoding();
+        verifyReaderPom400ModelVersionWithBuildSourceEncoding();
+
+        verifyWriterPom400ModelVersionWithBuildSourceEncoding();
     }
 
-    public void verifyPom400()
+    public void verifyReaderPom400()
         throws Exception
     {
         File file = new File( "src/test/verifiers/supportedVersions/pom400.xml" );
@@ -89,7 +93,7 @@ public class Xpp3SupportedVersionsVerifier
 
     }
 
-    public void verifyPom500()
+    public void verifyReaderPom500()
         throws Exception
     {
         File file = new File( "src/test/verifiers/supportedVersions/pom500.xml" );
@@ -119,7 +123,7 @@ public class Xpp3SupportedVersionsVerifier
 
     }
 
-    public void verifyPom500ModelVersionWithPom400Namespace()
+    public void verifyReaderPom500ModelVersionWithPom400Namespace()
                     throws Exception
     {
         File file = new File( "src/test/verifiers/supportedVersions/pom500+400.xml" );
@@ -138,7 +142,7 @@ public class Xpp3SupportedVersionsVerifier
         }
     }
 
-    public void verifyPom400ModelVersionWithPom500Namespace()
+    public void verifyReaderPom400ModelVersionWithPom500Namespace()
                     throws Exception
     {
         File file = new File( "src/test/verifiers/supportedVersions/pom400+500.xml" );
@@ -157,7 +161,7 @@ public class Xpp3SupportedVersionsVerifier
         }
     }
     
-    public void verifyPom400ModelVersionWithBuildSourceEncoding()
+    public void verifyReaderPom400ModelVersionWithBuildSourceEncoding()
                     throws Exception
     {
         File file = new File( "src/test/verifiers/supportedVersions/pom400+buildSourceEncoding.xml" );
@@ -175,4 +179,28 @@ public class Xpp3SupportedVersionsVerifier
         {
         }
     }
+    
+    public void verifyWriterPom400ModelVersionWithBuildSourceEncoding()
+                    throws Exception
+    {
+        MavenXpp3Writer modelWriter = new MavenXpp3Writer();
+
+        Model model = new Model();
+        model.setModelVersion( "4.0.0" );
+        model.setGroupId( "groupId");
+        model.setArtifactId( "artifactId" );
+        model.setVersion( "1.0.0-SNAPSHOT" );
+        model.setBuild( new Build() );
+        model.getBuild().setSourceEncoding( "UTF-8" );
+        try
+        {
+            modelWriter.write( new ByteArrayOutputStream(), model );
+            fail( "Should fail since sourcEncoding is supported since 5.0.0." );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            assertEquals( "build.getSourceEncoding() is not supported for version  4.0.0", e.getMessage() );
+        }
+    }
+
 }
